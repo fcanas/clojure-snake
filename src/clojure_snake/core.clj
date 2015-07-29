@@ -1,7 +1,8 @@
 (ns clojure-snake.core
   (:import (javax.swing JFrame JPanel)
            (java.awt.event WindowListener KeyListener)
-           (java.awt Color Dimension)))
+           (java.awt Color Dimension))
+  (:require [clojure.set :as set]))
 
 (def snake (atom [[0 1] [0 2] [0 3] [0 4]]))
 (def snake-belly (atom 0))
@@ -13,15 +14,15 @@
 
 (defn remove-tail [snake] (subvec snake 1))
 
-(defn drop-apple [apples max-x max-y]
-  (conj apples [(rand-int max-x) (rand-int max-y)]))
+(defn drop-apple [apples snake board]
+  (conj apples (rand-nth (vec (set/difference board (set/union (set snake) apples))))))
 
-(defn eat [snake snake-belly apples]
+(defn eat [snake snake-belly apples board]
   (if-not (nil? (some #{(last snake)} @apples))
     (do
       (swap! apples #(filterv (fn [a] (not= (last snake) a)) %))
       (swap! snake-belly #(+ 5 %))
-      (swap! apples #(drop-apple % world-size world-size)))))
+      (swap! apples #(drop-apple % snake board)))))
 
 (defn in-vector? [coords match] (some #{match} coords))
 
@@ -60,11 +61,11 @@
 
 (defn end-game [] (reset! game-over true))
 
-(defn tick [drawable direction snake]
+(defn tick [drawable direction snake board]
   (let [new-snake (metabolize (move-direction direction @snake))]
     (if (in-vector? @snake (last new-snake)) (end-game))
     (reset! snake new-snake)
-    (eat @snake snake-belly apples)
+    (eat @snake snake-belly apples board)
     (.repaint drawable)))
 
 (defn on-window-close [e] (end-game))
@@ -96,7 +97,8 @@
                    (paintComponent [g]
                      (proxy-super paintComponent g)
                      (paint-blocks g @snake)
-                     (paint-blocks g @apples Color/red)))]
+                     (paint-blocks g @apples Color/red)))
+        board (set (for [x (range world-size) y (range world-size)] (vector x y)))]
     (.setPreferredSize drawable (Dimension. (* size world-size) (* size world-size)))
     (doto window
       (.addWindowListener (proxy [WindowListener] []
@@ -116,5 +118,5 @@
 
     (future (loop []
               (Thread/sleep (get-speed @snake))
-              (tick drawable @direction snake)
+              (tick drawable @direction snake board)
               (when (not @game-over) (recur))))))
